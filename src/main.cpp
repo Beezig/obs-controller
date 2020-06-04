@@ -32,7 +32,7 @@ extern "C"
         auto eventCallback = [](enum obs_frontend_event event, void *param) {
             if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING)
             {
-                // Run frontend load events here
+                // Run any frontend load events here
                 obs_frontend_remove_event_callback((obs_frontend_event_cb)param, nullptr);
             }
         };
