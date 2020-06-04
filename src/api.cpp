@@ -15,32 +15,24 @@
 // You should have received a copy of the GNU General Public License
 // along with obs-controller.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <obs-module.h>
-#include <obs-frontend-api.h>
-#include <iostream>
 #include "api.hpp"
+#include <obs-frontend-api.h>
+#include <obs.hpp>
+#include <util/config-file.h>
 
-using namespace std;
-
-OBS_DECLARE_MODULE()
-
-extern "C"
+void ObsController::StartRecording()
 {
-    bool obs_module_load()
-    {
-        cout << "[Beezig] Loading OBS Controller" << endl;
-        auto eventCallback = [](enum obs_frontend_event event, void *param) {
-            if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING)
-            {
-                // Run frontend load events here
-                obs_frontend_remove_event_callback((obs_frontend_event_cb)param, nullptr);
-            }
-        };
-        obs_frontend_add_event_callback(eventCallback, (void *)(obs_frontend_event_cb)eventCallback);
-        return true;
-    }
+    obs_frontend_recording_start();
+}
 
-    void obs_module_unload()
-    {
-    }
+void ObsController::StopRecording()
+{
+    obs_frontend_recording_stop();
+}
+
+void ObsController::SetFileName(const char *name)
+{
+    auto profile = obs_frontend_get_profile_config();
+    config_set_string(profile, "Output", "FilenameFormatting", name);
+    config_save(profile);
 }
