@@ -1,5 +1,5 @@
 name: ci_meson
-
+on: push
 jobs:
 
   linux:
