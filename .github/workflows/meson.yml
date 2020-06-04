@@ -6,12 +6,8 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v1
-    - uses: actions/setup-python@v1
-      with:
-        python-version: '3.x'
-    - run: pip install meson ninja
     - name: Install OBS dependencies
-      run: sudo apt-get -qq update && sudo apt-get install -y libc-dev-bin libc6-dev git build-essential checkinstall cmake obs-studio qtbase5-dev libobs-dev
+      run: sudo apt-get -qq update && sudo apt-get install -y meson ninja-build libc-dev-bin libc6-dev git build-essential checkinstall cmake obs-studio qtbase5-dev libobs-dev
     - run: meson setup build
       env:
         CC: gcc
