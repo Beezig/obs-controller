@@ -9,4 +9,6 @@ libobsfrontend = cc.find_library('obs-frontend-api')
 # Include paths
 inc = include_directories(['/usr/include/obs'])
 
-library('obs-controller', ['src/main.cpp', 'src/api.cpp'], dependencies: [libobs, libobsfrontend], include_directories: inc)
+# Subdirectories
+subdir('src')
+
