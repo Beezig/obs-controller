@@ -9,7 +9,7 @@ trigger:
 jobs:
   - job: 'BuildLinux'
     pool:
-      vmImage: 'ubuntu-latest'
+      vmImage: 'ubuntu-20.04'
     steps:
       - script: sudo apt-get install -y meson ninja-build libc-dev-bin libc6-dev git build-essential checkinstall cmake obs-studio qtbase5-dev libobs-dev
         displayName: 'Install OBS dependencies'
