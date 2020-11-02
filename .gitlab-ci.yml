@@ -32,9 +32,9 @@ test:cargo:
 .artifacts:
   artifacts:
     paths:
-      - target/release/*.so
-      - target/release/*.dll
-      - target/release/*.dylib
+      - target/**/*.so
+      - target/**/*.dll
+      - target/**/*.dylib
     expire_in: 1 week
 
 build linux:
@@ -42,6 +42,17 @@ build linux:
   extends: .artifacts
   script:
     - cargo build --release
+  cache:
+    <<: *global_cache
+    policy: pull
+
+build windows x86_64:
+  stage: build
+  extends: .artifacts
+  script:
+    - apt-get install -yqq --no-install-recommends mingw-w64
+    - rustup target add x86_64-pc-windows-gnu
+    - cargo build --release --target x86_64-pc-windows-gnu
   cache:
     <<: *global_cache
     policy: pull
