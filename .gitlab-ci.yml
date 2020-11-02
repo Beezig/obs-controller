@@ -2,6 +2,7 @@ image: "rust:latest"
 variables:
   RUSTFLAGS: -D warnings
 before_script:
+  - apt-get update -y
   - apt-get install -y pkg-config libobs-dev
 
 test:cargo:
