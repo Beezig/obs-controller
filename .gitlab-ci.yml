@@ -1,12 +1,25 @@
 image: "rust:latest"
 variables:
   RUSTFLAGS: -D warnings
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
 before_script:
-  - apt-get update -y
-  - apt-get install -y pkg-config libobs-dev
+  - apt-get update -yqq
+  - apt-get install -yqq --no-install-recommends build-essential pkg-config libobs-dev lsb-release wget software-properties-common
+  - bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+
+cache: &global_cache
+  key: ${CI_COMMIT_BRANCH}
+  paths:
+    - target/
+    - $CARGO_HOME
+  policy: pull
 
 test:cargo:
   script:
+    - rustup component add clippy
     - rustc --version && cargo --version
     - cargo clippy
     - cargo test --workspace
+  cache:
+    <<: *global_cache
+    policy: pull-push
