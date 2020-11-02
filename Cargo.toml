@@ -1,0 +1,12 @@
+[package]
+name = "obs-controller"
+version = "0.1.0"
+authors = ["Beezig Team <contact@beezig.eu>"]
+edition = "2018"
+
+[dependencies]
+obs-sys = "0.1.3"
+
+[lib]
+name = "obs_controller"
+crate-type = ["cdylib"]

@@ -1,0 +1,11 @@
+image: "rust:latest"
+variables:
+  RUSTFLAGS: -D warnings
+before_script:
+  - apt-get install -y pkg-config libobs-dev
+
+test:cargo:
+  script:
+    - rustc --version && cargo --version
+    - cargo clippy
+    - cargo test --workspace
