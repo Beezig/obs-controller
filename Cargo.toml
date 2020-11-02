@@ -10,3 +10,8 @@ obs-sys = "0.1.3"
 [lib]
 name = "obs_controller"
 crate-type = ["cdylib"]
+
+[profile.release]
+# Size optimizations
+opt-level = "z"
+lto = true

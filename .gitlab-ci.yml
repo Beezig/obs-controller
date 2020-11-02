@@ -6,6 +6,11 @@ before_script:
   - apt-get update -yqq
   - apt-get install -yqq --no-install-recommends build-essential pkg-config libobs-dev lsb-release wget software-properties-common
   - bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+  - rustc --version && cargo --version
+
+stages:
+  - test
+  - build
 
 cache: &global_cache
   key: ${CI_COMMIT_BRANCH}
@@ -15,11 +20,28 @@ cache: &global_cache
   policy: pull
 
 test:cargo:
+  stage: test
   script:
     - rustup component add clippy
-    - rustc --version && cargo --version
     - cargo clippy
     - cargo test --workspace
   cache:
     <<: *global_cache
     policy: pull-push
+
+.artifacts:
+  artifacts:
+    paths:
+      - target/release/*.so
+      - target/release/*.dll
+      - target/release/*.dylib
+    expire_in: 1 week
+
+build linux:
+  stage: build
+  extends: .artifacts
+  script:
+    - cargo build --release
+  cache:
+    <<: *global_cache
+    policy: pull
