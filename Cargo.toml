@@ -3,6 +3,11 @@ name = "obs-controller"
 version = "0.1.0"
 authors = ["Beezig Team <contact@beezig.eu>"]
 edition = "2018"
+description = "An OBS plugin to control recording status over HTTP."
+readme = "README.md"
+repository = "https://gitlab.com/Beezig/obs-controller"
+license = "GPL-3.0-or-later"
+publish = false
 
 [dependencies]
 obs-sys = "0.1.3"
