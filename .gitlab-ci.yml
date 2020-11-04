@@ -56,3 +56,14 @@ build windows x86_64:
   cache:
     <<: *global_cache
     policy: pull
+
+build darwin:
+  stage: build
+  extends: .artifacts
+  image: "joseluisq/rust-linux-darwin-builder:latest"
+  script:
+    - rustup target add x86_64-apple-darwin
+    - cargo build --release --target x86_64-apple-darwin
+  cache:
+    <<: *global_cache
+    policy: pull
