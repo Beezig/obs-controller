@@ -16,7 +16,10 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use obs_sys::obs_module_t;
+mod recording;
+mod obs;
+
+use obs::obs_module_t;
 use std::os::raw::c_char;
 
 static mut MODULE: Option<*mut obs_module_t> = None;
@@ -56,5 +59,5 @@ pub extern "C" fn obs_module_name() -> *const c_char {
 
 #[no_mangle]
 pub extern "C" fn obs_module_ver() -> u32 {
-    obs_sys::LIBOBS_API_MAJOR_VER as u32
+    obs::LIBOBS_API_MAJOR_VER as u32
 }
