@@ -1,5 +1,6 @@
 use std::env;
 use std::path::PathBuf;
+use std::fs;
 
 fn main() {
     // Tell cargo to invalidate the built crate whenever the wrapper changes
@@ -7,14 +8,20 @@ fn main() {
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");
 
-    let bindings = bindgen::Builder::default()
+    if let Ok(bindings) = bindgen::Builder::default()
         .header("wrapper.h")
         .blacklist_type("_bindgen_ty_2")
         .clang_arg("-I/usr/include/obs")
         .derive_default(true)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-        .generate().expect("Couldn't generate bindings.");
-    bindings
-        .write_to_file(&out_path)
-        .expect("Couldn't write bindings!");
+        .generate() {
+        bindings
+            .write_to_file(&out_path)
+            .expect("Couldn't write bindings!");
+        fs::copy(&out_path, "bindings/generated.rs").expect("Could not copy bindings!");
+    } else {
+        println!("cargo:warning=Could not find obs headers - using pre-compiled.");
+        println!("cargo:warning=This could result in a library that doesn't work.");
+        fs::copy("bindings/generated.rs", out_path).expect("Could not copy bindings!");
+    }
 }
