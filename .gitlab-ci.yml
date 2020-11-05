@@ -6,6 +6,7 @@ before_script:
   - apt-get update -yqq
   - apt-get install -yqq --no-install-recommends build-essential pkg-config libobs-dev lsb-release wget software-properties-common gnupg2
   - bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+  - wget -O /usr/include/obs/obs-frontend-api.h https://raw.githubusercontent.com/obsproject/obs-studio/a38cd03e065efbc863bc897012900938aa70beb3/UI/obs-frontend-api/obs-frontend-api.h
   - rustc --version && cargo --version
 
 stages:
