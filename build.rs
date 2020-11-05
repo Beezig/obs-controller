@@ -18,10 +18,10 @@ fn main() {
         bindings
             .write_to_file(&out_path)
             .expect("Couldn't write bindings!");
-        fs::copy(&out_path, "bindings/generated.rs").expect("Could not copy bindings!");
+        fs::copy(&out_path, &format!("{}/obs-controller-bindings.rs", env::var("CARGO_TARGET_DIR").unwrap())).expect("Could not copy bindings!");
     } else {
         println!("cargo:warning=Could not find obs headers - using pre-compiled.");
         println!("cargo:warning=This could result in a library that doesn't work.");
-        fs::copy("bindings/generated.rs", out_path).expect("Could not copy bindings!");
+        fs::copy(&format!("{}/obs-controller-bindings.rs", env::var("CARGO_TARGET_DIR").unwrap()), out_path).expect("Could not copy bindings!");
     }
 }

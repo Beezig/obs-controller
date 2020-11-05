@@ -17,6 +17,7 @@ cache: &global_cache
   key: ${CI_COMMIT_BRANCH}
   paths:
     - target/
+    - bindings/
     - $CARGO_HOME
   policy: pull
 
