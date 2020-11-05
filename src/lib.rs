@@ -16,11 +16,11 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use std::os::raw::c_char;
+use obs::obs_module_t;
+
 mod recording;
 mod obs;
-
-use obs::obs_module_t;
-use std::os::raw::c_char;
 
 static mut MODULE: Option<*mut obs_module_t> = None;
 const MODULE_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "\0");
@@ -28,6 +28,7 @@ const MODULE_DESC: &str = concat!(env!("CARGO_PKG_DESCRIPTION"), "\0");
 
 #[no_mangle]
 pub extern "C" fn obs_module_load() -> bool {
+    println!("[OBS Controller] Load started.");
     println!("[OBS Controller] Load finished.");
     true
 }
