@@ -65,6 +65,7 @@ impl RecordingState {
     }
 
     /// Reverts the file name formatting to the saved one.
+    #[allow(unused)]
     pub(crate) unsafe fn revert_name(&self) {
         if let RecordingState::CustomName(old_name) = self {
             // We set the old name back
