@@ -21,13 +21,11 @@ use std::str::Utf8Error;
 
 use crate::obs;
 
-#[allow(unused)]
 pub enum RecordingState {
     Regular,
     CustomName(String)
 }
 
-#[allow(unused)]
 impl RecordingState {
     /// Starts recording with the default file name formatting.
     pub fn start() -> RecordingState {
@@ -66,18 +64,22 @@ impl RecordingState {
         }
     }
 
+    /// Reverts the file name formatting to the saved one.
+    pub(crate) unsafe fn revert_name(&self) {
+        if let RecordingState::CustomName(old_name) = self {
+            // We set the old name back
+            let config = obs::obs_frontend_get_profile_config();
+            let name = CString::new(old_name.as_str()).expect("Converting old name to CString");
+            let output = CString::new("Output").expect("Output as CString");
+            let formatting = CString::new("FilenameFormatting").expect("FNFmt as CString");
+            obs::config_set_string(config, output.as_ptr(), formatting.as_ptr(), name.as_ptr());
+            obs::config_save(config);
+        }
+    }
+
     /// Stops the current recording.
     pub fn stop(&self) {
         unsafe {
-            if let RecordingState::CustomName(old_name) = self {
-                // We set the old name back
-                let config = obs::obs_frontend_get_profile_config();
-                let name = CString::new(old_name.as_str()).expect("Converting old name to CString");
-                let output = CString::new("Output").expect("Output as CString");
-                let formatting = CString::new("FilenameFormatting").expect("FNFmt as CString");
-                obs::config_set_string(config, output.as_ptr(), formatting.as_ptr(), name.as_ptr());
-                obs::config_save(config);
-            }
             obs::obs_frontend_recording_stop()
         }
     }

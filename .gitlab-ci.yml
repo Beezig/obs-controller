@@ -52,8 +52,10 @@ build windows x86_64:
   stage: build
   extends: .artifacts
   script:
-    - apt-get install -yqq --no-install-recommends mingw-w64
+    - apt-get install -yqq --no-install-recommends mingw-w64 unzip
     - rustup target add x86_64-pc-windows-gnu
+    - wget -O link-libs/obs.zip https://cdn-fastly.obsproject.com/downloads/OBS-Studio-26.0.2-Full-x64.zip
+    - unzip -d link-libs link-libs/obs.zip
     - cargo build --release --target x86_64-pc-windows-gnu
   cache:
     <<: *global_cache

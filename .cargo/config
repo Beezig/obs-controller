@@ -1,3 +1,7 @@
 [target.x86_64-apple-darwin]
 linker = "x86_64-apple-darwin15-clang"
 ar = "x86_64-apple-darwin15-ar"
+rustflags = ["-C", "link-args=-L link-libs/bin/64bit -lobs-frontend-api -lobs"]
+
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-args=-L link-libs/bin/64bit -lobs-frontend-api -lobs"]
