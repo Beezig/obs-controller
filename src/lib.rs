@@ -55,7 +55,7 @@ pub extern "C" fn obs_module_load() -> bool {
         server.add_route("/", Box::new(move |req| {
             let bytes = info.as_bytes();
             let res = Response::new(StatusCode(200),
-                                    vec![Header::from_bytes("Content-Type".as_bytes(), "application/json".as_bytes()).unwrap()],
+                                    vec![Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap()],
                                     bytes, Some(bytes.len()), None,
             );
             req.respond(res)
