@@ -1,7 +1,7 @@
 image: "rust:latest"
 variables:
   RUSTFLAGS: -D warnings
-  CARGO_HOME: $CI_PROJECT_DIR/../.cargo
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
 before_script:
   - apt-get update -yqq
   - apt-get install -yqq --no-install-recommends build-essential pkg-config libobs-dev lsb-release wget software-properties-common gnupg2

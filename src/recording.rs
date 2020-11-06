@@ -65,7 +65,6 @@ impl RecordingState {
     }
 
     /// Reverts the file name formatting to the saved one.
-    #[allow(unused)]
     pub(crate) unsafe fn revert_name(&self) {
         if let RecordingState::CustomName(old_name) = self {
             // We set the old name back
@@ -79,15 +78,10 @@ impl RecordingState {
     }
 
     /// Stops the current recording.
+    #[allow(unused)]
     pub fn stop(&self) {
         unsafe {
             obs::obs_frontend_recording_stop()
         }
-    }
-}
-
-impl Drop for RecordingState {
-    fn drop(&mut self) {
-        self.stop();
     }
 }

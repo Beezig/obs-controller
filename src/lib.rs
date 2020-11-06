@@ -16,14 +16,15 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_void};
 use obs::obs_module_t;
 use std::thread;
 use crate::server::HttpServer;
 use tiny_http::{Response, StatusCode};
 use std::io::Read;
 use crate::recording::RecordingState;
-use std::sync::{RwLock, Arc};
+use std::sync::{Mutex, Arc};
+use std::ptr;
 
 mod recording;
 mod obs;
@@ -34,12 +35,16 @@ const MODULE_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "\0");
 const MODULE_DESC: &str = concat!(env!("CARGO_PKG_DESCRIPTION"), "\0");
 
 lazy_static::lazy_static! {
-    static ref STATE: Arc<RwLock<Option<RecordingState>>> = Arc::new(RwLock::new(None));
+    static ref STATE: Arc<Mutex<Option<RecordingState>>> = Arc::new(Mutex::new(None));
 }
 
 #[no_mangle]
 pub extern "C" fn obs_module_load() -> bool {
     println!("[OBS Controller] Load started.");
+    // Signals
+    unsafe { obs::obs_frontend_add_event_callback(Some(on_recording_stopped), ptr::null_mut()); }
+
+    // Web server
     thread::spawn(move || {
         let mut server = HttpServer::new(8085);
         server.add_route("/", Box::new(|req| req.respond(Response::new_empty(StatusCode(200)))));
@@ -47,14 +52,11 @@ pub extern "C" fn obs_module_load() -> bool {
             let mut body = String::with_capacity(1024.min(req.body_length().unwrap_or(1024)));
             req.as_reader().take(1024).read_to_string(&mut body).expect("Couldn't read body.");
             let recording = if body.is_empty() { RecordingState::start() } else { RecordingState::start_with_name(body).expect("Couldn't start recording") };
-            *STATE.write().expect("Poisoned RwLock") = Some(recording);
+            *STATE.lock().expect("Poisoned Mutex") = Some(recording);
             req.respond(Response::new_empty(StatusCode(200)))
         }));
         server.add_route("/recording/stop", Box::new(|req| {
-            match &mut *STATE.write().expect("Poisoned RwLock") {
-                opt @ Some(_) => drop(opt.take()),
-                None => unsafe { obs::obs_frontend_recording_stop() }
-            }
+            unsafe { obs::obs_frontend_recording_stop() };
             req.respond(Response::new_empty(StatusCode(200)))
         }));
         server.run().expect("Couldn't run HTTP server.");
@@ -67,6 +69,15 @@ pub extern "C" fn obs_module_load() -> bool {
 pub extern "C" fn obs_module_unload() -> bool {
     println!("[OBS Controller] Unloaded.");
     true
+}
+
+extern fn on_recording_stopped(event: obs::obs_frontend_event, _private_data: *mut c_void) {
+    if event == obs::obs_frontend_event_OBS_FRONTEND_EVENT_RECORDING_STOPPED {
+        let mut lock = STATE.lock().expect("Poisoned Mutex");
+        if let Some(state) = lock.take() {
+            unsafe { state.revert_name(); }
+        }
+    }
 }
 
 // OBS Module load helpers - these would be declared by the OBS_DECLARE_MODULE() C macro
