@@ -16,6 +16,9 @@ lazy_static = "1.4.0"
 [build-dependencies]
 bindgen = "0.55.1"
 
+[features]
+macos = []
+
 [lib]
 name = "obs_controller"
 crate-type = ["cdylib"]

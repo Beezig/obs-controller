@@ -5,7 +5,15 @@ use std::fs;
 fn main() {
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
+    // Add linker paths for cross-compilation
+    println!("cargo:rustc-link-search=native=link-libs/bin/64bit");
+    println!("cargo:rustc-link-search=native=link-libs/bin/64bit/libobs.0.dylib"); // Mac
+    // The macOS OBS only ships with libobs.0.dylib (not libobs.dylib)
+    #[cfg(feature = "macos")]
+    println!("cargo:rustc-link-lib=dylib=obs.0");
+    #[cfg(not(feature = "macos"))]
     println!("cargo:rustc-link-lib=dylib=obs");
+    // Link against the frontend API (for the recording status)
     println!("cargo:rustc-link-lib=dylib=obs-frontend-api");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");

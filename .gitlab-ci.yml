@@ -1,7 +1,7 @@
 image: "rust:latest"
 variables:
-  RUSTFLAGS: -D warnings -Clink-args=-Llink-libs/bin/64bit
-  CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  RUSTFLAGS: -D warnings
+  CARGO_HOME: $CI_PROJECT_DIR/../.cargo
 before_script:
   - apt-get update -yqq
   - apt-get install -yqq --no-install-recommends build-essential pkg-config libobs-dev lsb-release wget software-properties-common gnupg2
@@ -16,9 +16,9 @@ stages:
 cache: &global_cache
   key: ${CI_COMMIT_BRANCH}
   paths:
-    - target/
     - bindings/
     - $CARGO_HOME
+    - target/
   policy: pull
 
 test:cargo:
@@ -38,15 +38,15 @@ test:cargo:
       - target/**/*.dll
       - target/**/*.dylib
     expire_in: 1 week
+    cache:
+      <<: *global_cache
+      policy: pull
 
 build linux:
   stage: build
   extends: .artifacts
   script:
     - cargo build --release
-  cache:
-    <<: *global_cache
-    policy: pull
 
 build windows x86_64:
   stage: build
@@ -57,17 +57,19 @@ build windows x86_64:
     - wget -O link-libs/obs.zip https://cdn-fastly.obsproject.com/downloads/OBS-Studio-26.0.2-Full-x64.zip
     - unzip -d link-libs link-libs/obs.zip
     - cargo build --release --target x86_64-pc-windows-gnu
-  cache:
-    <<: *global_cache
-    policy: pull
 
 build darwin:
   stage: build
   extends: .artifacts
   image: "joseluisq/rust-linux-darwin-builder:latest"
+  variables:
+    CARGO_BUILD_TARGET: x86_64-apple-darwin
   script:
+    - apt-get install -yqq --no-install-recommends unzip
     - rustup target add x86_64-apple-darwin
-    - cargo build --release --target x86_64-apple-darwin
+    - wget -O link-libs/obs.zip https://static.beezig.eu/obs-controller-MacOS-libs.zip
+    - unzip -d link-libs link-libs/obs.zip
+    - cargo build --release --target x86_64-apple-darwin --features macos
   cache:
     <<: *global_cache
     policy: pull
