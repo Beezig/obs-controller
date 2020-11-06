@@ -18,17 +18,47 @@
 
 use std::os::raw::c_char;
 use obs::obs_module_t;
+use std::thread;
+use crate::server::HttpServer;
+use tiny_http::{Response, StatusCode};
+use std::io::Read;
+use crate::recording::RecordingState;
+use std::sync::{RwLock, Arc};
 
 mod recording;
 mod obs;
+mod server;
 
 static mut MODULE: Option<*mut obs_module_t> = None;
 const MODULE_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "\0");
 const MODULE_DESC: &str = concat!(env!("CARGO_PKG_DESCRIPTION"), "\0");
 
+lazy_static::lazy_static! {
+    static ref STATE: Arc<RwLock<Option<RecordingState>>> = Arc::new(RwLock::new(None));
+}
+
 #[no_mangle]
 pub extern "C" fn obs_module_load() -> bool {
     println!("[OBS Controller] Load started.");
+    thread::spawn(move || {
+        let mut server = HttpServer::new(8085);
+        server.add_route("/", Box::new(|req| req.respond(Response::new_empty(StatusCode(200)))));
+        server.add_route("/recording/start", Box::new(|mut req| {
+            let mut body = String::with_capacity(1024.min(req.body_length().unwrap_or(1024)));
+            req.as_reader().take(1024).read_to_string(&mut body).expect("Couldn't read body.");
+            let recording = if body.is_empty() { RecordingState::start() } else { RecordingState::start_with_name(body).expect("Couldn't start recording") };
+            *STATE.write().expect("Poisoned RwLock") = Some(recording);
+            req.respond(Response::new_empty(StatusCode(200)))
+        }));
+        server.add_route("/recording/stop", Box::new(|req| {
+            match &mut *STATE.write().expect("Poisoned RwLock") {
+                opt @ Some(_) => drop(opt.take()),
+                None => unsafe { obs::obs_frontend_recording_stop() }
+            }
+            req.respond(Response::new_empty(StatusCode(200)))
+        }));
+        server.run().expect("Couldn't run HTTP server.");
+    });
     println!("[OBS Controller] Load finished.");
     true
 }

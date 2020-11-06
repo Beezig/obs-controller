@@ -9,6 +9,10 @@ repository = "https://gitlab.com/Beezig/obs-controller"
 license = "GPL-3.0-or-later"
 publish = false
 
+[dependencies]
+tiny_http = "0.6"
+lazy_static = "1.4.0"
+
 [build-dependencies]
 bindgen = "0.55.1"
 

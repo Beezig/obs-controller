@@ -82,3 +82,9 @@ impl RecordingState {
         }
     }
 }
+
+impl Drop for RecordingState {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
