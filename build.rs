@@ -5,6 +5,8 @@ use std::fs;
 fn main() {
     // Tell cargo to invalidate the built crate whenever the wrapper changes
     println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rustc-link-lib=dylib=obs");
+    println!("cargo:rustc-link-lib=dylib=obs-frontend-api");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");
 

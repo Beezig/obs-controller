@@ -1,6 +1,6 @@
 image: "rust:latest"
 variables:
-  RUSTFLAGS: -D warnings
+  RUSTFLAGS: -D warnings -Clink-args=-Llink-libs/bin/64bit
   CARGO_HOME: $CI_PROJECT_DIR/.cargo
 before_script:
   - apt-get update -yqq
