@@ -20,11 +20,12 @@ use std::os::raw::{c_char, c_void};
 use obs::obs_module_t;
 use std::thread;
 use crate::server::HttpServer;
-use tiny_http::{Response, StatusCode};
+use tiny_http::{Response, StatusCode, Header};
 use std::io::Read;
 use crate::recording::RecordingState;
 use std::sync::{Mutex, Arc};
 use std::ptr;
+use std::ffi::CStr;
 
 mod recording;
 mod obs;
@@ -43,11 +44,22 @@ pub extern "C" fn obs_module_load() -> bool {
     println!("[OBS Controller] Load started.");
     // Signals
     unsafe { obs::obs_frontend_add_event_callback(Some(on_recording_stopped), ptr::null_mut()); }
+    let obs_version = unsafe {
+        CStr::from_ptr(obs::obs_get_version_string()).to_str().expect("Invalid version string")
+    };
 
     // Web server
     thread::spawn(move || {
         let mut server = HttpServer::new(8085);
-        server.add_route("/", Box::new(|req| req.respond(Response::new_empty(StatusCode(200)))));
+        let info = format!(r#"{{"version": "{}", "obs": "{}"}}"#, env!("CARGO_PKG_VERSION"), obs_version);
+        server.add_route("/", Box::new(move |req| {
+            let bytes = info.as_bytes();
+            let res = Response::new(StatusCode(200),
+                                    vec![Header::from_bytes("Content-Type".as_bytes(), "application/json".as_bytes()).unwrap()],
+                                    bytes, Some(bytes.len()), None,
+            );
+            req.respond(res)
+        }));
         server.add_route("/recording/start", Box::new(|mut req| {
             let mut body = String::with_capacity(1024.min(req.body_length().unwrap_or(1024)));
             req.as_reader().take(1024).read_to_string(&mut body).expect("Couldn't read body.");
