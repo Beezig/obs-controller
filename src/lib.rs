@@ -30,6 +30,7 @@ use std::ffi::CStr;
 mod recording;
 mod obs;
 mod server;
+mod verification;
 
 static mut MODULE: Option<*mut obs_module_t> = None;
 const MODULE_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "\0");
