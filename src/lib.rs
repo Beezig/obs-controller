@@ -20,12 +20,11 @@ use std::os::raw::{c_char, c_void};
 use obs::obs_module_t;
 use std::thread;
 use crate::server::HttpServer;
-use tiny_http::{Response, StatusCode, Header};
-use std::io::Read;
 use crate::recording::RecordingState;
 use std::sync::{Mutex, Arc};
 use std::ptr;
 use std::ffi::CStr;
+use crate::verification::VerificationResult;
 
 mod recording;
 mod obs;
@@ -54,23 +53,30 @@ pub extern "C" fn obs_module_load() -> bool {
         let mut server = HttpServer::new(8085);
         let info = format!(r#"{{"version": "{}", "obs": "{}"}}"#, env!("CARGO_PKG_VERSION"), obs_version);
         server.add_route("/", Box::new(move |req| {
-            let bytes = info.as_bytes();
-            let res = Response::new(StatusCode(200),
-                                    vec![Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap()],
-                                    bytes, Some(bytes.len()), None,
-            );
-            req.respond(res)
+            req.respond(server::json_response(200, &info))
         }));
         server.add_route("/recording/start", Box::new(|mut req| {
-            let mut body = String::with_capacity(1024.min(req.body_length().unwrap_or(1024)));
-            req.as_reader().take(1024).read_to_string(&mut body).expect("Couldn't read body.");
-            let recording = if body.is_empty() { RecordingState::start() } else { RecordingState::start_with_name(body).expect("Couldn't start recording") };
-            *STATE.lock().expect("Poisoned Mutex") = Some(recording);
-            req.respond(Response::new_empty(StatusCode(200)))
+            let body = verification::middleware_auth(&mut req).unwrap();
+            let (status, msg): (u16, &str) = match body {
+                VerificationResult::Body(body) => {
+                    let recording = if body.is_empty() { RecordingState::start() } else { RecordingState::start_with_name(body).expect("Couldn't start recording") };
+                    *STATE.lock().expect("Poisoned Mutex") = Some(recording);
+                    (200, r#"{"message": "Recording started"}"#)
+                },
+                VerificationResult::JsonReject(status, msg) => (status, msg)
+            };
+            req.respond(server::json_response(status, &msg))
         }));
-        server.add_route("/recording/stop", Box::new(|req| {
-            unsafe { obs::obs_frontend_recording_stop() };
-            req.respond(Response::new_empty(StatusCode(200)))
+        server.add_route("/recording/stop", Box::new(|mut req| {
+            let body = verification::middleware_auth(&mut req).unwrap();
+            let (status, msg): (u16, &str) = match body {
+                VerificationResult::Body(_) => {
+                    unsafe { obs::obs_frontend_recording_stop() };
+                    (200, r#"{"message": "Recording stopped"}"#)
+                },
+                VerificationResult::JsonReject(status, msg) => (status, msg)
+            };
+            req.respond(server::json_response(status, &msg))
         }));
         server.run().expect("Couldn't run HTTP server.");
     });
