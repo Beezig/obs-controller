@@ -16,19 +16,23 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use std::convert::TryInto;
+use std::fs::{File, OpenOptions};
+use std::io::{Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
+use std::str::FromStr;
+
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ed25519_dalek::{Keypair, PublicKey, Signature, Verifier};
 use rand_core::OsRng;
+use ring::aead::{Aad, AES_256_GCM, LessSafeKey, Nonce, UnboundKey};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Visitor;
 use sha2::{Digest, Sha256};
-use std::fs::{OpenOptions, File};
-use byteorder::{ReadBytesExt, LittleEndian, WriteBytesExt};
-use std::io::{Seek, SeekFrom, Read, Error, ErrorKind, Cursor};
 use tiny_http::Request;
+use x25519_dalek::EphemeralSecret;
 use yauuid::Uuid;
-use std::str::FromStr;
-use std::convert::TryInto;
-use crate::verification::VerificationResult::{JsonReject, Body};
+
+use crate::verification::VerificationResult::{Body, JsonReject};
 
 #[derive(Serialize, Deserialize)]
 pub struct AppMetadata {
@@ -109,13 +113,29 @@ pub fn middleware_auth(req: &mut Request) -> Result<VerificationResult, Error> {
     }
 }
 
+#[allow(unused)]
+/// Registers an app, returning the encrypted private key for Ed25519 message signing and the server's X25519 public key.
+pub fn register_encrypt(uuid: Uuid, name: String, their_pubkey: x25519_dalek::PublicKey) -> Result<(String, String), Error> {
+    let our_secret = EphemeralSecret::new(rand_core::OsRng);
+    let our_pubkey = x25519_dalek::PublicKey::from(&our_secret);
+    // Compute the shared secret from the app's public key and our generated secret
+    let shared = our_secret.diffie_hellman(&their_pubkey);
+    // Encrypt the app's Ed25519 private key for communication
+    let (_, key) = AppMetadata::register(uuid_to_u128(uuid)?, name);
+    let mut secret = [0u8; 32 + 16]; // tag length = 16
+    secret[..32].copy_from_slice(&key.secret.to_bytes());
+    let aes = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, shared.as_bytes()).expect("Couldn't create key"));
+    let tag = aes.seal_in_place_separate_tag(Nonce::assume_unique_for_key([121; 12]), Aad::empty(), &mut secret[..32]).expect("Couldn't create tag");
+    secret[32..].copy_from_slice(tag.as_ref());
+    Ok((base64::encode(&secret), base64::encode(&our_pubkey.to_bytes())))
+}
+
 fn uuid_to_u128(uuid: Uuid) -> Result<u128, Error> {
     let mut bytes = Cursor::new(uuid.as_bytes());
     bytes.read_u128::<LittleEndian>()
 }
 
 impl AppMetadata {
-    #[allow(unused)]
     pub fn register(uuid: u128, name: String) -> (AppMetadata, Keypair) {
         let pair = Keypair::generate(&mut OsRng);
         let app = AppMetadata {
@@ -161,12 +181,18 @@ fn deser_pubkey<'de, D>(deser: D) -> Result<PublicKey, D::Error> where D: Deseri
 
 #[cfg(test)]
 mod tests {
-    use ed25519_dalek::{Signature, Signer};
-    use super::AppMetadata;
-    use sha2::{Sha256, Digest};
-    use yauuid::Uuid;
     use std::str::FromStr;
-    use crate::verification::uuid_to_u128;
+
+    use ed25519_dalek::{SecretKey, Signature, Signer};
+    use rand_core::OsRng;
+    use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
+    use sha2::{Digest, Sha256};
+    use x25519_dalek::{EphemeralSecret, PublicKey};
+    use yauuid::Uuid;
+
+    use crate::verification::{register_encrypt, uuid_to_u128};
+
+    use super::AppMetadata;
 
     #[test]
     pub fn validate() {
@@ -189,5 +215,21 @@ mod tests {
     pub fn uuid() {
         let uuid = Uuid::from_str("98704291-09e9-40f2-8476-064521fadaff").unwrap();
         assert_eq!(340090132878606694826081478218872942744_u128, uuid_to_u128(uuid).unwrap());
+    }
+
+    #[test]
+    pub fn get_private_key() {
+        let secret = EphemeralSecret::new(OsRng);
+        let pub_key = PublicKey::from(&secret);
+        let (private, public) = register_encrypt(Uuid::from_str("98704291-09e9-40f2-8476-064521fadaff").unwrap(), String::from("Test"), pub_key).unwrap();
+        let mut server_pub = [0u8; 32];
+        server_pub.copy_from_slice(&base64::decode(public).unwrap());
+        let server_pub = PublicKey::from(server_pub);
+        let shared = secret.diffie_hellman(&server_pub);
+        let aes = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, shared.as_bytes()).unwrap());
+        let mut priv_bytes = [0u8; 48];
+        priv_bytes.copy_from_slice(&base64::decode(private).unwrap());
+        aes.open_in_place(Nonce::assume_unique_for_key([121; 12]), Aad::empty(), &mut priv_bytes).unwrap();
+        SecretKey::from_bytes(&priv_bytes[..32]).unwrap();
     }
 }
