@@ -1,0 +1,223 @@
+variables:
+  macosSignAndNotarize: false
+  isReleaseMode: false
+
+trigger:
+  branches:
+    include:
+      - master
+      - verification
+  tags:
+    include:
+      - '*'
+
+jobs:
+  - job: 'Build_Windows'
+    pool:
+      vmImage: 'windows-2019'
+    variables:
+      build_config: RelWithDebInfo
+      DepsBasePath: 'D:\obsdependencies'
+      DepsPath32: '$(DepsBasePath)\win32'
+      DepsPath64: '$(DepsBasePath)\win64'
+      QtBaseDir: 'D:\QtDep'
+      QTDIR32: '$(QtBaseDir)\5.10.1\msvc2017'
+      QTDIR64: '$(QtBaseDir)\5.10.1\msvc2017_64'
+      OBSPath: 'D:\obs-studio'
+    steps:
+      - checkout: self
+        submodules: true
+
+      - script: ./ci/windows/install-choco.cmd
+        displayName: 'Install Chocolatey'
+
+      - script: |
+          choco install -y llvm
+          refreshenv
+        displayName: 'Install LLVM'
+
+      - task: Cache@2
+        displayName: Cargo target cache
+        inputs:
+          key: 'rust-target | "$(Agent.OS)"'
+          restoreKeys: |
+            rust-target | "$(Agent.OS)"
+          path: target
+
+      - script: |
+          curl -sSf -o rustup-init.exe https://win.rustup.rs
+          rustup-init.exe -y --default-toolchain stable
+          echo "##vso[task.setvariable variable=PATH;]%PATH%;%USERPROFILE%\.cargo\bin"
+          rustup target add i686-pc-windows-msvc
+
+      - script: ./ci/windows/install-qt-win.cmd
+        displayName: 'Install Qt'
+        env:
+          QtBaseDir: $(QtBaseDir)
+
+      - task: Cache@2
+        displayName: Restore cached OBS Studio dependencies
+        inputs:
+          key: 'obsdeps | "$(Agent.OS)"'
+          restoreKeys: |
+            obsdeps | "$(Agent.OS)"
+          path: $(DepsBasePath)
+
+      - script: ./ci/windows/download-obs-deps.cmd
+        displayName: 'Download OBS Studio dependencies'
+
+      - task: Cache@2
+        displayName: Restore cached OBS Studio builds
+        inputs:
+          key: 'obs | "$(Agent.OS)"'
+          restoreKeys: |
+            obs | "$(Agent.OS)"
+          path: $(OBSPath)
+
+      - script: ./ci/windows/prepare-obs-windows.cmd
+        displayName: 'Checkout & CMake OBS Studio'
+        env:
+          build_config: $(build_config)
+          DepsPath32: $(DepsPath32)
+          DepsPath64: $(DepsPath64)
+          QTDIR32: $(QTDIR32)
+          QTDIR64: $(QTDIR64)
+          OBSPath: $(OBSPath)
+
+      - task: MSBuild@1
+        displayName: 'Build OBS Studio 32-bit'
+        inputs:
+          msbuildArguments: '/m /p:Configuration=$(build_config)'
+          solution: '$(OBSPath)\build32\obs-studio.sln'
+
+      - task: MSBuild@1
+        displayName: 'Build OBS Studio 64-bit'
+        inputs:
+          msbuildArguments: '/m /p:Configuration=$(build_config)'
+          solution: '$(OBSPath)\build64\obs-studio.sln'
+
+      - script: ./ci/windows/prepare-windows.cmd
+        displayName: 'Prepare libraries for Rust build'
+        env:
+          OBS_PATH: $(OBSPath)
+
+      - script: echo "##vso[task.setvariable variable=PATH;]%PATH%;$(QTDIR64)\bin;$(QTDIR32)\bin"
+        displayName: 'Update path for Qt'
+
+      - script: cargo build --release --target x86_64-pc-windows-msvc
+        displayName: 'Build Plugin 64-bit'
+        env:
+          QT_INCLUDE_DIR: '$(QTDIR64)\include'
+          QT_LIB_DIR: '$(QTDIR64)\lib'
+          LIBOBS_INCLUDE_DIR: '$(OBSPath)'
+          LIBOBS_LIB: '$(OBSPath)\build64\libobs\RelWithDebInfo'
+          OBS_FRONTEND_LIB: '$(OBSPath)\build64\UI\obs-frontend-api\RelWithDebInfo'
+          LIBCLANG_PATH: 'C:\Program Files\LLVM\bin'
+
+      - script: cargo build --release --target i686-pc-windows-msvc
+        displayName: 'Build Plugin 32-bit'
+        env:
+          QT_INCLUDE_DIR: '$(QTDIR32)\include'
+          QT_LIB_DIR: '$(QTDIR32)\lib'
+          LIBOBS_INCLUDE_DIR: '$(OBSPath)'
+          LIBOBS_LIB: '$(OBSPath)\build32\libobs\RelWithDebInfo'
+          OBS_FRONTEND_LIB: '$(OBSPath)\build32\UI\obs-frontend-api\RelWithDebInfo'
+          LIBCLANG_PATH: 'C:\Program Files\LLVM\bin'
+
+      - task: CopyFiles@2
+        inputs:
+          sourceFolder: './target/release'
+          contents: '*.dll'
+          targetFolder: '$(Build.ArtifactStagingDirectory)/64'
+      - task: CopyFiles@2
+        inputs:
+          sourceFolder: './target/i686-pc-windows-msvc/release'
+          contents: '*.dll'
+          targetFolder: '$(Build.ArtifactStagingDirectory)/32'
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)/64'
+          artifactName: win-64
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)/32'
+          artifactName: win-32
+
+  - job: 'Build_Linux'
+    pool:
+      vmImage: 'ubuntu-20.04'
+    variables:
+      BUILD_REASON: $(Build.Reason)
+      BRANCH_SHORT_NAME: $(Build.SourceBranchName)
+      BRANCH_FULL_NAME: $(Build.SourceBranch)
+    steps:
+      - checkout: self
+        submodules: true
+
+      - script: ./ci/linux/install-dependencies-ubuntu.sh
+        displayName: 'Install dependencies'
+
+      - task: Cache@2
+        displayName: Cargo target cache
+        inputs:
+          key: 'rust-target | "$(Agent.OS)"'
+          restoreKeys: |
+            rust-target | "$(Agent.OS)"
+          path: target
+
+      - script: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+          echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
+        displayName: Install Rust
+
+      - script: ./ci/linux/build-ubuntu.sh
+        displayName: 'Build Plugin'
+
+      - task: CopyFiles@2
+        inputs:
+          sourceFolder: './target/release'
+          contents: '*.so'
+          targetFolder: '$(Build.ArtifactStagingDirectory)'
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)'
+          artifactName: linux-64
+
+  - job: 'Build_macOS'
+    pool:
+      vmImage: 'macos-10.14'
+    steps:
+      - checkout: self
+        submodules: true
+
+      - script: ./ci/macos/install-dependencies-macos.sh
+        displayName: 'Install dependencies'
+
+      - script: ./ci/macos/install-build-obs-macos.sh
+        displayName: 'Build OBS'
+
+      - task: Cache@2
+        displayName: Cargo target cache
+        inputs:
+          key: 'rust-target | "$(Agent.OS)"'
+          restoreKeys: |
+            rust-target | "$(Agent.OS)"
+          path: target
+
+      - script: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+          echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
+        displayName: Install Rust
+
+      - script: ./ci/macos/build-macos.sh
+        displayName: 'Build Plugin'
+
+      - task: CopyFiles@2
+        inputs:
+          sourceFolder: './target/release'
+          contents: '*.dylib'
+          targetFolder: '$(Build.ArtifactStagingDirectory)'
+      - task: PublishBuildArtifacts@1
+        inputs:
+          pathToPublish: '$(Build.ArtifactStagingDirectory)'
+          artifactName: mac-64

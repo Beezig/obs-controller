@@ -16,10 +16,10 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 use cpp::cpp;
-
+/*
 use qt_core::QString;
 use qt_widgets::QMessageBox;
-use qt_widgets::q_message_box::StandardButton;
+use qt_widgets::q_message_box::StandardButton;*/
 use std::ffi::CString;
 use std::sync::mpsc::Sender;
 
@@ -79,17 +79,19 @@ impl Dialog {
 #[allow(clippy::boxed_local)]
 fn open_dialog(app_info: Box<AppInfo>, sender: Box<Sender<DialogResult>>) {
     let res = unsafe {
-        let msg_box = QMessageBox::new();
-        let std = app_info.name.to_str().unwrap();
-        let title = QString::from_std_str(&std);
-        msg_box.set_window_title(&title);
-        let desc = QString::from_std_str(&format!("Allow {} to access OBS?", std));
-        msg_box.set_text(&desc);
-        msg_box.add_button_standard_button(StandardButton::Yes);
-        msg_box.add_button_standard_button(StandardButton::No);
-        msg_box.set_default_button_standard_button(StandardButton::No);
-        msg_box.set_escape_button_standard_button(StandardButton::No);
-        msg_box.exec()
+        let desc = CString::new(format!("Allow {} to access OBS?", app_info.name.to_str().unwrap())).unwrap();
+        let desc_ptr = desc.as_ptr();
+        let title_ptr = app_info.name.as_ptr();
+        cpp!([desc_ptr as "const char*", title_ptr as "const char*"] -> u32 as "int32_t" {
+            QMessageBox msgBox;
+            QString title {title_ptr}, desc {desc_ptr};
+            msgBox.setWindowTitle(title);
+            msgBox.setText(desc);
+            msgBox.addButton(QMessageBox::StandardButton::Yes);
+            msgBox.addButton(QMessageBox::StandardButton::No);
+            msgBox.setDefaultButton(QMessageBox::StandardButton::No);
+            return msgBox.exec();
+        })
     };
     sender.send(if res == 65536 {DialogResult::Denied} else {DialogResult::Accepted(app_info)}).unwrap();
 }

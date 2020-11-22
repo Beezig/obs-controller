@@ -1,17 +1,14 @@
 image: "rust:latest"
 variables:
   RUSTFLAGS: -D warnings
-  CARGO_HOME: $CI_PROJECT_DIR/.cargo
 before_script:
   - apt-get update -yqq
-  - apt-get install -yqq --no-install-recommends build-essential pkg-config libobs-dev lsb-release wget software-properties-common gnupg2
+  - apt-get install -yqq --no-install-recommends build-essential pkg-config libobs-dev lsb-release wget software-properties-common gnupg2 qt5-default qt5-qmake qtbase5-dev cmake curl
   - bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
   - wget -O /usr/include/obs/obs-frontend-api.h https://raw.githubusercontent.com/obsproject/obs-studio/a38cd03e065efbc863bc897012900938aa70beb3/UI/obs-frontend-api/obs-frontend-api.h
-  - rustc --version && cargo --version
 
 stages:
   - test
-  - build
 
 cache: &global_cache
   key: ${CI_COMMIT_BRANCH}
@@ -21,7 +18,9 @@ cache: &global_cache
     - target/
   policy: pull
 
-test:cargo:
+test stable:
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/.cargo
   stage: test
   script:
     - rustup component add clippy
@@ -31,45 +30,9 @@ test:cargo:
     <<: *global_cache
     policy: pull-push
 
-.artifacts:
-  cache:
-    <<: *global_cache
-    policy: pull
-  artifacts:
-    paths:
-      - target/**/*.so
-      - target/**/*.dll
-      - target/**/*.dylib
-    expire_in: 1 week
-
-build linux:
-  stage: build
-  extends: .artifacts
+test nightly:
+  allow_failure: true
+  stage: test
   script:
-    - cargo build --release
-
-build windows x86_64:
-  stage: build
-  extends: .artifacts
-  script:
-    - apt-get install -yqq --no-install-recommends mingw-w64 unzip
-    - rustup target add x86_64-pc-windows-gnu
-    - wget -O link-libs/obs.zip https://cdn-fastly.obsproject.com/downloads/OBS-Studio-26.0.2-Full-x64.zip
-    - unzip -d link-libs link-libs/obs.zip
-    - cargo build --release --target x86_64-pc-windows-gnu
-
-build darwin:
-  stage: build
-  extends: .artifacts
-  image: "joseluisq/rust-linux-darwin-builder:latest"
-  variables:
-    CARGO_BUILD_TARGET: x86_64-apple-darwin
-  script:
-    - apt-get install -yqq --no-install-recommends unzip
-    - rustup target add x86_64-apple-darwin
-    - wget -O link-libs/obs.zip https://static.beezig.eu/obs-controller-MacOS-libs.zip
-    - unzip -d link-libs link-libs/obs.zip
-    - cargo build --release --target x86_64-apple-darwin --features macos
-  cache:
-    <<: *global_cache
-    policy: pull
+    - rustup toolchain add nightly
+    - cargo +nightly test --workspace

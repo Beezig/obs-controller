@@ -18,8 +18,7 @@
 
 use std::convert::TryInto;
 use std::fs::{File, OpenOptions};
-use std::io::{Cursor, Error, ErrorKind, Read, Seek, SeekFrom};
-use std::str::FromStr;
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use ed25519_dalek::{Keypair, PublicKey, Signature, Verifier};
@@ -30,9 +29,9 @@ use serde::de::Visitor;
 use sha2::{Digest, Sha256};
 use tiny_http::Request;
 use x25519_dalek::EphemeralSecret;
-use yauuid::Uuid;
 
 use crate::verification::VerificationResult::{Body, JsonReject};
+use uuid::Uuid;
 
 #[derive(Serialize, Deserialize)]
 pub struct AppMetadata {
@@ -77,7 +76,7 @@ pub enum VerificationResult {
 /// Parses an HTTP request, checks if the app is authenticated and returns the body if so
 pub fn middleware_auth(req: &mut Request) -> Result<VerificationResult, Error> {
     let app = req.headers().iter().filter(|h| h.field.as_str() == "X-OBSC-App")
-        .map(|h| Uuid::from_str(h.value.as_str())).next();
+        .map(|h| Uuid::parse_str(h.value.as_str())).next();
     let signature = req.headers().iter().filter(|h| h.field.as_str() == "X-OBSC-Signature")
         .map(|h| base64::decode(h.value.as_str())).next();
     match (&app, &signature) {
@@ -95,7 +94,7 @@ pub fn middleware_auth(req: &mut Request) -> Result<VerificationResult, Error> {
     let mut body = String::with_capacity(1024.min(req.body_length().unwrap_or(1024)));
     req.as_reader().take(1024).read_to_string(&mut body).expect("Couldn't read body.");
     let msg = if body.is_empty() { "obs-controller" } else { body.as_str() };
-    let app = uuid_to_u128(app.unwrap().unwrap())?;
+    let app = uuid_to_u128(app.unwrap().unwrap());
     let app = match find_app(app)? {
         Some(app) => app,
         None => {
@@ -121,7 +120,7 @@ pub fn register_encrypt(uuid: Uuid, name: String, their_pubkey: x25519_dalek::Pu
     // Compute the shared secret from the app's public key and our generated secret
     let shared = our_secret.diffie_hellman(&their_pubkey);
     // Encrypt the app's Ed25519 private key for communication
-    let (_, key) = AppMetadata::register(uuid_to_u128(uuid)?, name);
+    let (_, key) = AppMetadata::register(uuid_to_u128(uuid), name);
     let mut secret = [0u8; 32 + 16]; // tag length = 16
     secret[..32].copy_from_slice(&key.secret.to_bytes());
     let aes = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, shared.as_bytes()).expect("Couldn't create key"));
@@ -130,9 +129,8 @@ pub fn register_encrypt(uuid: Uuid, name: String, their_pubkey: x25519_dalek::Pu
     Ok((base64::encode(&secret), base64::encode(&our_pubkey.to_bytes())))
 }
 
-fn uuid_to_u128(uuid: Uuid) -> Result<u128, Error> {
-    let mut bytes = Cursor::new(uuid.as_bytes());
-    bytes.read_u128::<LittleEndian>()
+fn uuid_to_u128(uuid: Uuid) -> u128 {
+    uuid.to_u128_le()
 }
 
 impl AppMetadata {
@@ -181,18 +179,16 @@ fn deser_pubkey<'de, D>(deser: D) -> Result<PublicKey, D::Error> where D: Deseri
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use ed25519_dalek::{SecretKey, Signature, Signer};
     use rand_core::OsRng;
     use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
     use sha2::{Digest, Sha256};
     use x25519_dalek::{EphemeralSecret, PublicKey};
-    use yauuid::Uuid;
 
     use crate::verification::{register_encrypt, uuid_to_u128};
 
     use super::AppMetadata;
+    use uuid::Uuid;
 
     #[test]
     pub fn validate() {
@@ -213,15 +209,15 @@ mod tests {
 
     #[test]
     pub fn uuid() {
-        let uuid = Uuid::from_str("98704291-09e9-40f2-8476-064521fadaff").unwrap();
-        assert_eq!(340090132878606694826081478218872942744_u128, uuid_to_u128(uuid).unwrap());
+        let uuid = Uuid::parse_str("98704291-09e9-40f2-8476-064521fadaff").unwrap();
+        assert_eq!(340090132878606694826081478218872942744_u128, uuid_to_u128(uuid));
     }
 
     #[test]
     pub fn get_private_key() {
         let secret = EphemeralSecret::new(OsRng);
         let pub_key = PublicKey::from(&secret);
-        let (private, public) = register_encrypt(Uuid::from_str("98704291-09e9-40f2-8476-064521fadaff").unwrap(), String::from("Test"), pub_key).unwrap();
+        let (private, public) = register_encrypt(Uuid::parse_str("98704291-09e9-40f2-8476-064521fadaff").unwrap(), String::from("Test"), pub_key).unwrap();
         let mut server_pub = [0u8; 32];
         server_pub.copy_from_slice(&base64::decode(public).unwrap());
         let server_pub = PublicKey::from(server_pub);

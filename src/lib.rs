@@ -55,8 +55,9 @@ pub extern "C" fn obs_module_load() -> bool {
         let mut server = HttpServer::new(8085);
         let info = format!(r#"{{"version": "{}", "obs": "{}"}}"#, env!("CARGO_PKG_VERSION"), obs_version);
         server.add_route("/", Box::new(move |req| {
-            let (tx, _rx) = std::sync::mpsc::channel();
+            let (tx, rx) = std::sync::mpsc::channel();
             Dialog::new(AppInfo::new("Test".to_string()), Box::new(tx)).open();
+            println!("{:?}", rx.recv().unwrap());
             req.respond(server::json_response(200, &info))
         }));
         server.add_route("/recording/start", Box::new(|mut req| {

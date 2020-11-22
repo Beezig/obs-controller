@@ -1,10 +1,6 @@
 use std::env;
 use std::path::PathBuf;
 use std::fs;
-use semver::Version;
-use std::io::prelude::*;
-use std::io::BufReader;
-use std::path::Path;
 use std::process::Command;
 
 // https://github.com/woboq/qmetaobject-rs/blob/master/qmetaobject/build.rs
@@ -21,48 +17,25 @@ fn qmake_query(var: &str) -> String {
         .expect("UTF-8 conversion failed")
 }
 
-// qreal is a double, unless QT_COORD_TYPE says otherwise:
-// https://doc.qt.io/qt-5/qtglobal.html#qreal-typedef
-fn detect_qreal_size(qt_include_path: &str) {
-    let path = Path::new(qt_include_path).join("QtCore").join("qconfig.h");
-    let f = std::fs::File::open(&path).unwrap_or_else(|_| panic!("Cannot open `{:?}`", path));
-    let b = BufReader::new(f);
-
-    // Find declaration of QT_COORD_TYPE
-    for line in b.lines() {
-        let line = line.expect("qconfig.h is valid UTF-8");
-        if line.contains("QT_COORD_TYPE") {
-            if line.contains("float") {
-                println!("cargo:rustc-cfg=qreal_is_float");
-                return;
-            } else {
-                panic!("QT_COORD_TYPE with unknown declaration {}", line);
-            }
-        }
-    }
-}
-
 fn main() {
-    let qt_include_path = qmake_query("QT_INSTALL_HEADERS");
-    let qt_library_path = qmake_query("QT_INSTALL_LIBS");
-    let qt_version =
-        qmake_query("QT_VERSION").parse::<Version>().expect("Parsing Qt version failed");
+    let qt_includes = env::var("QT_INCLUDE_DIR").ok();
+    let qt_libs = env::var("QT_LIB_DIR").ok();
+    let qt_include_path = match qt_includes {
+        Some(env) => env,
+        None => qmake_query("QT_INSTALL_HEADERS")
+    };
+    let qt_library_path = match qt_libs {
+        Some(env) => env,
+        None => qmake_query("QT_INSTALL_LIBS")
+    };
     let mut config = cpp_build::Config::new();
-
     if cfg!(target_os = "macos") {
         config.flag("-F");
         config.flag(qt_library_path.trim());
     }
-
-    for minor in 7..=15 {
-        if qt_version >= Version::new(5, minor, 0) {
-            println!("cargo:rustc-cfg=qt_5_{}", minor);
-        }
-    }
-
-    detect_qreal_size(&qt_include_path.trim());
-
-    config.include(qt_include_path.trim()).build("src/dialog.rs");
+    config
+        .include(qt_include_path.trim())
+        .build("src/dialog.rs");
 
     let macos_lib_search = if cfg!(target_os = "macos") { "=framework" } else { "" };
     let macos_lib_framework = if cfg!(target_os = "macos") { "" } else { "5" };
@@ -77,22 +50,42 @@ fn main() {
     println!("cargo:rustc-link-search=native=link-libs/bin/64bit");
     println!("cargo:rustc-link-search=native=link-libs/bin/64bit/libobs.0.dylib"); // Mac
     // The macOS OBS only ships with libobs.0.dylib (not libobs.dylib)
-    #[cfg(feature = "macos")]
+    #[cfg(target_os = "macos")]
     println!("cargo:rustc-link-lib=dylib=obs.0");
-    #[cfg(not(feature = "macos"))]
+    #[cfg(not(target_os = "macos"))]
     println!("cargo:rustc-link-lib=dylib=obs");
     // Link against the frontend API (for the recording status)
     println!("cargo:rustc-link-lib=dylib=obs-frontend-api");
 
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs");
 
-    if let Ok(bindings) = bindgen::Builder::default()
+    let include_env = env::var("LIBOBS_INCLUDE_DIR").ok().map(|s| format!("-I{}", s));
+    let lib_env = env::var("LIBOBS_LIB").ok();
+    let frontend_env = env::var("OBS_FRONTEND_LIB").ok();
+
+    let mut builder = bindgen::Builder::default()
         .header("wrapper.h")
         .blacklist_type("_bindgen_ty_2")
+        .clang_arg("-v")
         .clang_arg("-I/usr/include/obs")
+        .clang_arg("-I/usr/local/include/obs")
+        .clang_arg("-IC:\\Libs\\obs")
+        .clang_arg("-IC:\\Libs")
         .derive_default(true)
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
-        .generate() {
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks));
+
+    if let Some(include) = include_env {
+        let obs = format!("{}/obs", include);
+        builder = builder.clang_arg(include).clang_arg(obs);
+    }
+    if let Some(lib) = lib_env {
+        println!("cargo:rustc-link-search=native={}", lib);
+    }
+    if let Some(frontend) = frontend_env {
+        println!("cargo:rustc-link-search=native={}", frontend);
+    }
+
+    if let Ok(bindings) = builder.generate() {
         bindings
             .write_to_file(&out_path)
             .expect("Couldn't write bindings!");
