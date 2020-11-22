@@ -25,11 +25,13 @@ use std::sync::{Mutex, Arc};
 use std::ptr;
 use std::ffi::CStr;
 use crate::verification::VerificationResult;
+use crate::dialog::{Dialog, AppInfo};
 
 mod recording;
 mod obs;
 mod server;
 mod verification;
+mod dialog;
 
 static mut MODULE: Option<*mut obs_module_t> = None;
 const MODULE_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "\0");
@@ -53,6 +55,8 @@ pub extern "C" fn obs_module_load() -> bool {
         let mut server = HttpServer::new(8085);
         let info = format!(r#"{{"version": "{}", "obs": "{}"}}"#, env!("CARGO_PKG_VERSION"), obs_version);
         server.add_route("/", Box::new(move |req| {
+            let (tx, _rx) = std::sync::mpsc::channel();
+            Dialog::new(AppInfo::new("Test".to_string()), Box::new(tx)).open();
             req.respond(server::json_response(200, &info))
         }));
         server.add_route("/recording/start", Box::new(|mut req| {
@@ -90,7 +94,7 @@ pub extern "C" fn obs_module_unload() -> bool {
     true
 }
 
-extern fn on_recording_stopped(event: obs::obs_frontend_event, _private_data: *mut c_void) {
+extern "C" fn on_recording_stopped(event: obs::obs_frontend_event, _private_data: *mut c_void) {
     if event == obs::obs_frontend_event_OBS_FRONTEND_EVENT_RECORDING_STOPPED {
         let mut lock = STATE.lock().expect("Poisoned Mutex");
         if let Some(state) = lock.take() {
