@@ -126,7 +126,7 @@ jobs:
 
       - task: CopyFiles@2
         inputs:
-          sourceFolder: './target/release'
+          sourceFolder: './target/x86_64-pc-windows-msvc/release'
           contents: '*.dll'
           targetFolder: '$(Build.ArtifactStagingDirectory)/64'
       - task: CopyFiles@2
