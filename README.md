@@ -1,4 +1,7 @@
 # OBS Controller
+[![Gitlab pipeline status](https://img.shields.io/gitlab/pipeline/Beezig/obs-controller/master)](https://gitlab.com/Beezig/obs-controller/-/pipelines) 
+[![Build Status](https://dev.azure.com/roccodevbusiness/Beezig/_apis/build/status/Beezig.obs-controller?branchName=master)](https://dev.azure.com/roccodevbusiness/Beezig/_build/latest?definitionId=2&branchName=master)
+
 An OBS plugin to control recording status over HTTP.
 
 ## Building
