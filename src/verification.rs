@@ -32,6 +32,7 @@ use x25519_dalek::EphemeralSecret;
 
 use crate::verification::VerificationResult::{Body, JsonReject};
 use uuid::Uuid;
+use std::path::Path;
 
 #[derive(Serialize, Deserialize)]
 pub struct AppMetadata {
@@ -42,7 +43,7 @@ pub struct AppMetadata {
 }
 
 pub fn find_app(uuid: u128) -> Result<Option<AppMetadata>, Error> {
-    let file = File::open("obs-controller-apps.ock");
+    let file = File::open(&*crate::APPS_FILE);
     let mut file = match file {
         Ok(file) => file,
         Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
@@ -145,7 +146,11 @@ impl AppMetadata {
             name,
             pub_key: pair.public,
         };
-        let mut file = OpenOptions::new().create(true).write(true).append(true).open("obs-controller-apps.ock").unwrap();
+        let path = Path::new(&*crate::APPS_FILE);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("Couldn't create parent dirs");
+        }
+        let mut file = OpenOptions::new().create(true).write(true).append(true).open(path).unwrap();
         let size = bincode::serialized_size(&app).expect("Couldn't get serialized size");
         file.write_u64::<LittleEndian>(size).expect("Couldn't write size");
         bincode::serialize_into(&mut file, &app).expect("Couldn't serialize into file");

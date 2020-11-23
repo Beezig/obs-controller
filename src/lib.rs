@@ -43,6 +43,7 @@ const MODULE_DESC: &str = concat!(env!("CARGO_PKG_DESCRIPTION"), "\0");
 
 lazy_static::lazy_static! {
     static ref STATE: Arc<Mutex<Option<RecordingState>>> = Arc::new(Mutex::new(None));
+    static ref APPS_FILE: String = format!("{}/obs-controller/apps.ock", dirs::data_dir().map(|p| p.to_str().unwrap_or(".").to_string()).unwrap_or_else(|| ".".to_string()));
 }
 
 #[derive(serde::Deserialize)]
