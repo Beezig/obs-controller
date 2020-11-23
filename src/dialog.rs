@@ -45,7 +45,7 @@ pub struct Dialog {
 #[repr(C)]
 #[derive(Debug)]
 pub struct AppInfo {
-    name: CString
+    pub(crate) name: CString
 }
 
 impl AppInfo {
