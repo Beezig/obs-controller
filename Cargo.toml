@@ -43,3 +43,4 @@ crate-type = ["cdylib"]
 [profile.release]
 # Size optimizations
 opt-level = "z"
+lto = true
