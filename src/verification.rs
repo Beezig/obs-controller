@@ -115,12 +115,16 @@ pub fn middleware_auth(req: &mut Request) -> Result<VerificationResult, Error> {
 #[allow(unused)]
 /// Registers an app, returning the encrypted private key for Ed25519 message signing and the server's X25519 public key.
 pub fn register_encrypt(uuid: Uuid, name: String, their_pubkey: x25519_dalek::PublicKey) -> Result<(String, String), Error> {
+    let uuid = uuid_to_u128(uuid);
+    if find_app(uuid)?.is_some() {
+        return Err(Error::from(std::io::ErrorKind::AlreadyExists));
+    }
     let our_secret = EphemeralSecret::new(rand_core::OsRng);
     let our_pubkey = x25519_dalek::PublicKey::from(&our_secret);
     // Compute the shared secret from the app's public key and our generated secret
     let shared = our_secret.diffie_hellman(&their_pubkey);
     // Encrypt the app's Ed25519 private key for communication
-    let (_, key) = AppMetadata::register(uuid_to_u128(uuid), name);
+    let (_, key) = AppMetadata::register(uuid, name);
     let mut secret = [0u8; 32 + 16]; // tag length = 16
     secret[..32].copy_from_slice(&key.secret.to_bytes());
     let aes = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, shared.as_bytes()).expect("Couldn't create key"));

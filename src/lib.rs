@@ -26,7 +26,7 @@ use std::ptr;
 use std::ffi::CStr;
 use crate::verification::VerificationResult;
 use crate::dialog::{Dialog, AppInfo, DialogResult};
-use std::io::Read;
+use std::io::{Read, ErrorKind};
 use uuid::Uuid;
 use std::convert::TryInto;
 use std::borrow::Cow;
@@ -99,11 +99,16 @@ pub extern "C" fn obs_module_load() -> bool {
                 match rx.recv().unwrap() {
                     DialogResult::Accepted(app) => {
                         let registration = verification::register_encrypt(uuid.unwrap(), app.name.to_str().unwrap().to_string(), pub_key);
-                        validate_input!(registration.is_ok(), "An error occurred while registering your application", 500);
-                        let (secret, our_pk) = registration.unwrap();
-                        (200, Cow::Owned(format!(r#"{{"key": "{}", "shared_public": "{}"}}"#, secret, our_pk)))
+                        match registration {
+                            Ok((secret, our_pk)) => (200, Cow::Owned(format!(r#"{{"key": "{}", "shared_public": "{}"}}"#, secret, our_pk))),
+                            Err(e) if e.kind() == ErrorKind::AlreadyExists => (409, Cow::Borrowed(r#"{"message": "An app with the same UUID already exists"}"#)),
+                            Err(e) => {
+                                eprintln!("User request refused due to an error {:?}", e);
+                                (500, Cow::Borrowed(r#"{"message": "The request couldn't be fulfilled due to an error"}"#))
+                            }
+                        }
                     }
-                    DialogResult::Denied => (401, Cow::Borrowed(r#"{"message": "Your registration request was denied by the user"}"#))
+                    DialogResult::Denied => (401, Cow::Borrowed(r#"{"message": "The registration request was denied by the user"}"#))
                 }
             })();
             req.respond(server::json_response(status, &res))
