@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::io;
 
-use tiny_http::{Request, Response, Server, StatusCode};
+use tiny_http::{Request, Response, Server, StatusCode, Header};
 
 pub type ResCallback = Box<dyn Fn(Request) -> io::Result<()>>;
 
@@ -48,4 +48,10 @@ impl HttpServer {
         }
         Ok(())
     }
+}
+
+pub fn json_response(status: u16, text: &str) -> Response<&[u8]> {
+    Response::new(StatusCode(status),
+                  vec![Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..]).unwrap()],
+                  text.as_bytes(), Some(text.as_bytes().len()), None)
 }
