@@ -129,7 +129,7 @@ pub fn register_encrypt(uuid: Uuid, name: String, their_pubkey: x25519_dalek::Pu
     let mut secret = [0u8; 32 + 16]; // tag length = 16
     secret[..32].copy_from_slice(&key.secret.to_bytes());
     let aes = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, shared.as_bytes()).expect("Couldn't create key"));
-    let tag = aes.seal_in_place_separate_tag(Nonce::assume_unique_for_key([121; 12]), Aad::empty(), &mut secret[..32]).expect("Couldn't create tag");
+    let tag = aes.seal_in_place_separate_tag(Nonce::assume_unique_for_key([0; 12]), Aad::empty(), &mut secret[..32]).expect("Couldn't create tag");
     secret[32..].copy_from_slice(tag.as_ref());
     Ok((base64::encode(&secret), base64::encode(&our_pubkey.to_bytes())))
 }
@@ -234,7 +234,7 @@ mod tests {
         let aes = LessSafeKey::new(UnboundKey::new(&AES_256_GCM, shared.as_bytes()).unwrap());
         let mut priv_bytes = [0u8; 48];
         priv_bytes.copy_from_slice(&base64::decode(private).unwrap());
-        aes.open_in_place(Nonce::assume_unique_for_key([121; 12]), Aad::empty(), &mut priv_bytes).unwrap();
+        aes.open_in_place(Nonce::assume_unique_for_key([0; 12]), Aad::empty(), &mut priv_bytes).unwrap();
         SecretKey::from_bytes(&priv_bytes[..32]).unwrap();
     }
 }
