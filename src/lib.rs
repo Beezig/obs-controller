@@ -128,12 +128,12 @@ pub extern "C" fn obs_module_load() -> bool {
         }));
         server.add_route("/recording/stop", Box::new(|mut req| {
             let body = verification::middleware_auth(&mut req).unwrap();
-            let (status, msg): (u16, &str) = match body {
+            let (status, msg): (u16, Cow<str>) = match body {
                 VerificationResult::Body(_) => {
-                    unsafe { obs::obs_frontend_recording_stop() };
-                    (200, r#"{"message": "Recording stopped"}"#)
+                    let res = RecordingState::stop();
+                    (200, Cow::Owned(serde_json::to_string(&res).unwrap()))
                 }
-                VerificationResult::JsonReject(status, msg) => (status, msg)
+                VerificationResult::JsonReject(status, msg) => (status, Cow::Borrowed(msg))
             };
             req.respond(server::json_response(status, &msg))
         }));
