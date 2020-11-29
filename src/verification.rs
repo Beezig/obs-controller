@@ -76,6 +76,11 @@ pub enum VerificationResult {
 
 /// Parses an HTTP request, checks if the app is authenticated and returns the body if so
 pub fn middleware_auth(req: &mut Request) -> Result<VerificationResult, Error> {
+    if !cfg!(verification) {
+        let mut body = String::with_capacity(1024.min(req.body_length().unwrap_or(1024)));
+        req.as_reader().take(1024).read_to_string(&mut body)?;
+        return Ok(VerificationResult::Body(body))
+    }
     let app = req.headers().iter().filter(|h| h.field.as_str() == "X-OBSC-App")
         .map(|h| Uuid::parse_str(h.value.as_str())).next();
     let signature = req.headers().iter().filter(|h| h.field.as_str() == "X-OBSC-Signature")
@@ -93,7 +98,7 @@ pub fn middleware_auth(req: &mut Request) -> Result<VerificationResult, Error> {
         }
     }
     let mut body = String::with_capacity(1024.min(req.body_length().unwrap_or(1024)));
-    req.as_reader().take(1024).read_to_string(&mut body).expect("Couldn't read body.");
+    req.as_reader().take(1024).read_to_string(&mut body)?;
     let msg = if body.is_empty() { "obs-controller" } else { body.as_str() };
     let app = uuid_to_u128(app.unwrap().unwrap());
     let app = match find_app(app)? {

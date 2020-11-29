@@ -36,7 +36,9 @@ bindgen = "0.55.1"
 cpp_build = "0.5"
 
 [features]
+default = ["verification"]
 macos = []
+verification = []
 
 [lib]
 name = "obs_controller"

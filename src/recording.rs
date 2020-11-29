@@ -78,10 +78,54 @@ impl RecordingState {
     }
 
     /// Stops the current recording.
-    #[allow(unused)]
-    pub fn stop(&self) {
+    pub fn stop() -> StopResponse {
         unsafe {
-            obs::obs_frontend_recording_stop()
+            let path = RecordingState::recording_path();
+            obs::obs_frontend_recording_stop();
+            StopResponse {path}
         }
+    }
+
+    unsafe fn recording_path() -> Option<String> {
+        let output = obs::obs_frontend_get_recording_output();
+        if output.is_null() {
+            return None;
+        }
+        let output = FileOutput(output);
+        let settings = obs::obs_output_get_settings(output.0);
+        if settings.is_null() {
+            return None;
+        }
+        let settings = OutputData(settings);
+        let mut path = obs::obs_data_get_string(settings.0, "path\0".as_ptr() as *const i8);
+        if path.is_null() {
+            path = obs::obs_data_get_string(settings.0, "url\0".as_ptr() as *const i8);
+        }
+        if path.is_null() {
+            return None;
+        }
+        let cstr = CStr::from_ptr(path);
+        let parsed = cstr.to_str().unwrap();
+        if parsed.is_empty() { None } else { Some(parsed.to_string()) }
+    }
+}
+
+#[derive(serde::Serialize)]
+pub struct StopResponse {
+    path: Option<String>
+}
+
+struct FileOutput(*mut obs::obs_output_t);
+struct OutputData(*mut obs::obs_data_t);
+
+impl Drop for FileOutput {
+    fn drop(&mut self) {
+        unsafe { obs::obs_output_release(self.0); }
+    }
+}
+
+impl Drop for OutputData {
+    fn drop(&mut self) {
+        unsafe { obs::obs_data_release(self.0); }
     }
 }
