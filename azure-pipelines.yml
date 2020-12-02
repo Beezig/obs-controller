@@ -124,8 +124,8 @@ jobs:
           OBS_FRONTEND_LIB: '$(OBSPath)\build32\UI\obs-frontend-api\RelWithDebInfo'
           LIBCLANG_PATH: 'C:\Program Files\LLVM\bin'
       - script: |
-          ren target/x86_64-pc-windows-msvc/release/*.dll *-win64.dll
-          ren target/i686-pc-windows-msvc/release/*.dll *-win32.dll
+          rename target\x86_64-pc-windows-msvc\release\*.dll *-win64.dll
+          rename target\i686-pc-windows-msvc\release\*.dll *-win32.dll
         displayName: Rename files for publish
       - task: CopyFiles@2
         inputs:
