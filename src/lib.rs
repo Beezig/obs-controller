@@ -16,26 +16,29 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::os::raw::{c_char, c_void};
-use obs::obs_module_t;
-use std::thread;
-use crate::server::HttpServer;
+use crate::dialog::{AppInfo, Dialog, DialogResult};
 use crate::recording::RecordingState;
-use std::sync::{Mutex, Arc};
-use std::ptr;
-use std::ffi::CStr;
+use crate::server::HttpServer;
 use crate::verification::VerificationResult;
-use crate::dialog::{Dialog, AppInfo, DialogResult};
-use std::io::{Read, ErrorKind};
-use uuid::Uuid;
-use std::convert::TryInto;
+use obs::obs_module_t;
 use std::borrow::Cow;
+use std::convert::TryInto;
+use std::ffi::CStr;
+use std::io::{ErrorKind, Read};
+use std::os::raw::{c_char, c_void};
+use std::ptr;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use uuid::Uuid;
 
-mod recording;
+#[macro_use]
+mod macros;
+
+mod dialog;
 mod obs;
+mod recording;
 mod server;
 mod verification;
-mod dialog;
 
 static mut MODULE: Option<*mut obs_module_t> = None;
 const MODULE_NAME: &str = concat!(env!("CARGO_PKG_NAME"), "\0");
@@ -56,7 +59,10 @@ struct AppRegistrationData {
 macro_rules! validate_input {
     ($condition: expr, $desc: literal, $code: literal) => {
         if !($condition) {
-            return ($code, Cow::Borrowed(concat!(r#"{"message": ""#, $desc, r#""}"#)));
+            return (
+                $code,
+                Cow::Borrowed(concat!(r#"{"message": ""#, $desc, r#""}"#)),
+            );
         }
     };
 }
@@ -65,18 +71,27 @@ macro_rules! validate_input {
 pub extern "C" fn obs_module_load() -> bool {
     println!("[OBS Controller] Load started.");
     // Signals
-    unsafe { obs::obs_frontend_add_event_callback(Some(on_recording_stopped), ptr::null_mut()); }
+    unsafe {
+        obs::obs_frontend_add_event_callback(Some(on_recording_stopped), ptr::null_mut());
+    }
     let obs_version = unsafe {
-        CStr::from_ptr(obs::obs_get_version_string()).to_str().expect("Invalid version string")
+        CStr::from_ptr(obs::obs_get_version_string())
+            .to_str()
+            .expect("Invalid version string")
     };
 
     // Web server
     thread::spawn(move || {
         let mut server = HttpServer::new(8085);
-        let info = format!(r#"{{"version": "{}", "obs": "{}"}}"#, env!("CARGO_PKG_VERSION"), obs_version);
-        server.add_route("/", Box::new(move |req| {
-            req.respond(server::json_response(200, &info))
-        }));
+        let info = format!(
+            r#"{{"version": "{}", "obs": "{}"}}"#,
+            env!("CARGO_PKG_VERSION"),
+            obs_version
+        );
+        server.add_route(
+            "/",
+            Box::new(move |req| req.respond(server::json_response(200, &info))),
+        );
         server.add_route("/register", Box::new(move |mut req| {
             let (tx, rx) = std::sync::mpsc::channel();
             let (status, res): (u16, Cow<str>) = (|| {
@@ -114,29 +129,39 @@ pub extern "C" fn obs_module_load() -> bool {
             })();
             req.respond(server::json_response(status, &res))
         }));
-        server.add_route("/recording/start", Box::new(|mut req| {
-            let body = verification::middleware_auth(&mut req).unwrap();
-            let (status, msg): (u16, &str) = match body {
-                VerificationResult::Body(body) => {
-                    let recording = if body.is_empty() { RecordingState::start() } else { RecordingState::start_with_name(body).expect("Couldn't start recording") };
-                    *STATE.lock().expect("Poisoned Mutex") = Some(recording);
-                    (200, r#"{"message": "Recording started"}"#)
-                }
-                VerificationResult::JsonReject(status, msg) => (status, msg)
-            };
-            req.respond(server::json_response(status, &msg))
-        }));
-        server.add_route("/recording/stop", Box::new(|mut req| {
-            let body = verification::middleware_auth(&mut req).unwrap();
-            let (status, msg): (u16, Cow<str>) = match body {
-                VerificationResult::Body(_) => {
-                    let res = RecordingState::stop();
-                    (200, Cow::Owned(serde_json::to_string(&res).unwrap()))
-                }
-                VerificationResult::JsonReject(status, msg) => (status, Cow::Borrowed(msg))
-            };
-            req.respond(server::json_response(status, &msg))
-        }));
+        server.add_route(
+            "/recording/start",
+            Box::new(|mut req| {
+                let body = verification::middleware_auth(&mut req).unwrap();
+                let (status, msg): (u16, &str) = match body {
+                    VerificationResult::Body(body) => {
+                        let recording = if body.is_empty() {
+                            RecordingState::start()
+                        } else {
+                            RecordingState::start_with_name(body).expect("Couldn't start recording")
+                        };
+                        *STATE.lock().expect("Poisoned Mutex") = Some(recording);
+                        (200, r#"{"message": "Recording started"}"#)
+                    }
+                    VerificationResult::JsonReject(status, msg) => (status, msg),
+                };
+                req.respond(server::json_response(status, &msg))
+            }),
+        );
+        server.add_route(
+            "/recording/stop",
+            Box::new(|mut req| {
+                let body = verification::middleware_auth(&mut req).unwrap();
+                let (status, msg): (u16, Cow<str>) = match body {
+                    VerificationResult::Body(_) => {
+                        let res = RecordingState::stop();
+                        (200, Cow::Owned(serde_json::to_string(&res).unwrap()))
+                    }
+                    VerificationResult::JsonReject(status, msg) => (status, Cow::Borrowed(msg)),
+                };
+                req.respond(server::json_response(status, &msg))
+            }),
+        );
         server.run().expect("Couldn't run HTTP server.");
     });
     println!("[OBS Controller] Load finished.");
@@ -153,7 +178,9 @@ extern "C" fn on_recording_stopped(event: obs::obs_frontend_event, _private_data
     if event == obs::obs_frontend_event_OBS_FRONTEND_EVENT_RECORDING_STOPPED {
         let mut lock = STATE.lock().expect("Poisoned Mutex");
         if let Some(state) = lock.take() {
-            unsafe { state.revert_name(); }
+            unsafe {
+                state.revert_name();
+            }
         }
     }
 }
